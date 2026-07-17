@@ -105,9 +105,10 @@ description: >-
    | `situational` | 상황별 정형 반응 | 상황명 |
    | `writing_genre` | 사용자 본인의 글쓰기 문체 | 장르명 — [18장](#18-글쓰기-문체-온보딩-writing_genre) |
    | `editorial` | 타인 문체 레퍼런스(명시적 호출 시만) | 레퍼런스명 — [19장](#19-editorial-레퍼런스-editorial) |
+   | `lexicon` | 자주 쓰는 구체적 표현/캐치프레이즈 저장고 | 표현 자체(예: `"약간"`) — [4장](#4-프로파일링정교화) 참고 |
 
-   `writing_genre`/`editorial`은 껍데기만 있고 child는 각 장의 절차로 채운다. 새 dimension이
-   필요하면 이 표의 패턴을 따라 추가한다(스키마 변경 불필요).
+   `writing_genre`/`editorial`/`lexicon`은 껍데기만 있고 child는 각 장의 절차(또는 4장의
+   평소 정교화)로 채운다. 새 dimension이 필요하면 이 표의 패턴을 따라 추가한다(스키마 변경 불필요).
 5. `echo_profile_put({isOnboard:true, onboarded_at:<ISO 시각>})`으로 완료를 표시하고,
    `echo_export_md({owner})`로 받은 마크다운을 `PROFILE.md`에 저장한다.
 
@@ -119,6 +120,11 @@ description: >-
   `echo_dimension_child_put`으로 그 child 하나만 다시 쓴다(다른 child는 건드리지 않는다).
 - 완전히 새로운 축이 필요하면 `echo_dimension_put`으로 dimension을 먼저 등록한 뒤(3장 표
   참고) child를 채운다.
+- **`tone` vs `lexicon` 판단 기준** — 대화 중 새로 관찰된 말버릇이 **경향/패턴**이면(예:
+  "물음표를 연달아 찍는다") `tone`의 해당 필드를 갱신하고, **구체적인 단어나 문구 하나**면
+  (예: "약간", "얼탱이없네" 같은 특정 표현) `lexicon`에 그 표현을 `child_key`로 새 child를
+  추가한다(`echo_dimension_child_put({parent_key:'lexicon', child_key:'<표현>', echo_data:{meaning, context, register, frequency, example}})`).
+  같은 정보를 두 곳에 중복해서 넣지 않는다 — 패턴이면 tone, 낱개 표현이면 lexicon 한쪽에만.
 - 사용자가 준 새 원문은 `echo_sample_add`로 계속 누적한다.
 - 과설계 금지 — 스키마에 명세 밖의 필드를 임의로 늘리지 않는다.
 

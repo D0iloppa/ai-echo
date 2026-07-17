@@ -16,10 +16,13 @@ function makeSampleKey(suffix) {
   return suffix != null ? `${Date.now()}-${suffix}-${rand}` : `${Date.now()}-${rand}`;
 }
 
-function profileCompleteness(profile) {
-  const fields = ['tone', 'register', 'situational', 'emoji', 'signoffs', 'notes'];
-  const present = fields.filter((f) => profile && profile[f] != null);
-  return { present, missing: fields.filter((f) => !present.includes(f)) };
+// 하드코딩된 필드 목록 대신 실제 등록된 dimension(schems) 기준으로 완성도를 판단한다 —
+// 새 dimension을 추가해도(예: writing_genre, editorial, lexicon) 이 함수를 고칠 필요가 없다.
+// "present"는 그 dimension 밑에 child가 최소 1개 있는지로 판단한다(빈 껍데기는 missing).
+function profileCompleteness(schems) {
+  const keys = Object.keys(schems ?? {});
+  const present = keys.filter((k) => djinn.find('echo_dimension_childs', { parent_key: k }).length > 0);
+  return { present, missing: keys.filter((k) => !present.includes(k)) };
 }
 
 function topEmojis(profile, limit) {
@@ -705,6 +708,7 @@ function createServer() {
       owner: z.string().optional().default('default'),
     },
     async ({ owner }) => {
+      const root = getProfileRoot();
       const profileDoc = loadFullProfile();
       const addressingRows = djinn.find(COLLECTION, { owner, type: 'addressing' });
       const sampleRows = djinn.find(COLLECTION, { owner, type: 'sample' });
@@ -712,7 +716,7 @@ function createServer() {
       const guardrailRows = djinn.find(COLLECTION, { owner, type: 'guardrail' });
       const byChannel = {};
       for (const s of sampleRows) byChannel[s.channel] = (byChannel[s.channel] ?? 0) + 1;
-      const completeness = profileCompleteness(profileDoc?.profile);
+      const completeness = profileCompleteness(root?.schems);
       return json({
         owner,
         has_profile: !!profileDoc,
