@@ -37,7 +37,7 @@ description: >-
   이모지 남용, 상투적 마무리 등)로 흘러가지 않도록 프로파일에 근거해 교정한다.
 - `mcp__ai-echo__*` (dJinn MCP)를 프로파일/호칭/샘플의 **SoT**로 쓴다. 사람이 읽는 스냅샷은
   `echo_export_md`로 뽑아 스킬 위치의 `PROFILE.md`로 미러한다(사람이 직접 열어볼 수 있게).
-- MCP가 없으면 절차를 막지 않되 [optional requirements](#21-optional-requirements)의 폴백을 따른다.
+- MCP가 없으면 절차를 막지 않되 [optional requirements](#22-optional-requirements)의 폴백을 따른다.
 - **프로파일은 owner가 없는 전역 싱글턴이다.** 이 스킬은 "한 사람의 말투를 배우는 도구"라는
   전제(echo=메아리, 반사체는 하나)라 프로파일에 페르소나 개념을 두지 않는다. 업무/사적처럼
   상황에 따라 톤이 달라지는 건 [6장 register](#6-채널격식별-레지스터-register) 축으로
@@ -51,7 +51,7 @@ description: >-
   으로 루트를 가볍게 확인한다. `isOnboard`가 `true`가 아니면 **차단하지 않고 온보딩을
   유도한다** — 사용자가 건너뛰면 품질 한계를 짧게 고지하고 그대로 진행한다(차단 아니라 유도가
   이 스킬 전체에 반복되는 게이트 패턴이다 — [3장](#3-최초-온보딩-onboarding)·
-  [18장](#18-글쓰기-문체-온보딩-writing_genre)도 동일). 온보딩이 끝나면 `isOnboard:true`로
+  [19장](#19-글쓰기-문체-온보딩-writing_genre)도 동일). 온보딩이 끝나면 `isOnboard:true`로
   전환되어 이후 진입에서는 이 유도가 뜨지 않는다.
 
 ## 2. 커맨드
@@ -66,9 +66,9 @@ description: >-
 | `draft <맥락> [프리셋]` | 대화 답장 초안 생성(톤 변주, 가드레일·템플릿 반영). | [12장](#12-답장-초안-생성-draft) |
 | `say <의도> [프리셋]` | 상대 메시지 없이 의도만으로 메시지 초안 생성. | [13장](#13-의도--초안-say) |
 | `onboard` | 최초 대화체 온보딩. | [3장](#3-최초-온보딩-onboarding) |
-| `onboard writing [장르]` | 글쓰기 문체(`writing_genre`) 온보딩. | [18장](#18-글쓰기-문체-온보딩-writing_genre) |
-| `editorial [add\|list\|get\|del] <이름>` | 타인 문체 레퍼런스 관리(명시적 호출 시에만 사용). | [19장](#19-editorial-레퍼런스-editorial) |
-| `write <주제> [장르] [editorial:<이름>]` | 독립된 글(수필/블로그/개발문서 등) 초안 생성. | [20장](#20-글쓰기-초안-write) |
+| `onboard writing [장르]` | 글쓰기 문체(`writing_genre`) 온보딩. | [19장](#19-글쓰기-문체-온보딩-writing_genre) |
+| `editorial [add\|list\|get\|del] <이름>` | 타인 문체 레퍼런스 관리(명시적 호출 시에만 사용). | [20장](#20-editorial-레퍼런스-editorial) |
+| `write <주제> [장르] [editorial:<이름>]` | 독립된 글(수필/블로그/개발문서 등) 초안 생성. | [21장](#21-글쓰기-초안-write) |
 | `profile` | 프로파일 조회/정교화, 전역 호칭 관리. | [4장](#4-프로파일링정교화)·[5장](#5-전역-호칭-vs-휘발성-호칭) |
 | `persona [<owner>]` | addressing/sample/guardrail/template의 owner 전환. | [7장](#7-페르소나owner-전환-persona) |
 | `guardrail` | 채널·상대별 금지/우선 표현 관리. | [8장](#8-스타일-가드레일-guardrail) |
@@ -77,6 +77,7 @@ description: >-
 | `ingest <파일/붙여넣기>` | 카톡/이메일 내보내기 파일을 일괄 샘플 적재. | [15장](#15-벌크-인제스트-ingest) |
 | `explain` | 직전 draft가 왜 그렇게 나왔는지 근거 설명(휘발성). | [16장](#16-초안-근거-설명-explain) |
 | `export` / `report` / `migrate` | PROFILE.md 스냅샷 / 완성도 통계 / 다른 설치로 이관. | [17장](#17-export--report--migration) |
+| `whoami` | 축적된 프로파일로 "나는 어떤 사람인가"를 재미로 요약(추정 MBTI/애니어그램 포함). | [18장](#18-셀프-리포트-whoami) |
 
 ## 3. 최초 온보딩 (Onboarding)
 
@@ -103,8 +104,8 @@ description: >-
    | `notes` | 샘플 출처·메타 노트 | 없음(`notes`) |
    | `register` | 채널·상대별 톤 | `<채널:상대>` — [6장](#6-채널격식별-레지스터-register) |
    | `situational` | 상황별 정형 반응 | 상황명 |
-   | `writing_genre` | 사용자 본인의 글쓰기 문체 | 장르명 — [18장](#18-글쓰기-문체-온보딩-writing_genre) |
-   | `editorial` | 타인 문체 레퍼런스(명시적 호출 시만) | 레퍼런스명 — [19장](#19-editorial-레퍼런스-editorial) |
+   | `writing_genre` | 사용자 본인의 글쓰기 문체 | 장르명 — [19장](#19-글쓰기-문체-온보딩-writing_genre) |
+   | `editorial` | 타인 문체 레퍼런스(명시적 호출 시만) | 레퍼런스명 — [20장](#20-editorial-레퍼런스-editorial) |
    | `lexicon` | 자주 쓰는 구체적 표현/캐치프레이즈 저장고 | 표현 자체(예: `"약간"`) — [4장](#4-프로파일링정교화) 참고 |
 
    `writing_genre`/`editorial`/`lexicon`은 껍데기만 있고 child는 각 장의 절차(또는 4장의
@@ -236,13 +237,38 @@ description: >-
   통째로, addressing/sample/guardrail/template은 지정 owner 범위만 옮긴다.
   `mode:'replace'`는 파괴적이므로 사용자 확인 후에만 사용한다.
 
-## 18. 글쓰기 문체 온보딩 (writing_genre)
+## 18. 셀프 리포트 (whoami)
+
+`whoami` — 지금까지 쌓인 프로파일 전체를 훑어 "이 사람은 어떤 사람인가"를 캐릭터 분석처럼
+요약해주는 리포트다. **재미용이다** — 임상적/단정적인 성격 분석이 아니라 가볍게 보는
+자기소개 카드에 가깝다는 걸 스스로도, 사용자에게도 전제한다.
+
+- 데이터 소스는 `echo_export_md`처럼 전체 dimension+child를 통짜로 읽는다 — [17장](#17-export--report--migration)과
+  같은 "전체가 필요한" 케이스라 평소 draft/say의 부분 조회 원칙([6장](#6-채널격식별-레지스터-register))은
+  적용하지 않는다.
+- 출력 구성은 고정 포맷이 아니라 데이터에 맞게 자유롭게 짜되, 예를 들면: 한 줄 캐치프레이즈 →
+  register별로 상사/친구/협력자 앞에서 얼마나 다른 얼굴을 보이는지 → `lexicon`의 시그니처
+  표현 몇 개 → 감정 표현 방식(이모지/웃음 패턴) → 추정 MBTI/애니어그램(아래 참고) → 총평 한 줄.
+- **추정 MBTI/애니어그램(재미용)** — `tone`/`situational`(거절·질책·감탄 등 반응)/`register`
+  (관계별 얼굴 차이)/`lexicon`을 근거로 MBTI 네 글자, 애니어그램 번호를 하나씩 추정해 덧붙일
+  수 있다. 매번 **"실제 검사가 아니라 이 프로파일만 보고 재미로 추정한 것"**이라는 문구를
+  결과 바로 옆에 명시하고, 왜 그렇게 봤는지 프로파일 근거를 1~2줄로 짧게 댄다(예: "질문마다
+  물음표를 연달아 찍고 상황마다 대응 방식이 뚜렷하게 갈리는 게 관찰돼서 ENFJ 쪽으로 봤어요").
+  근거가 빈약하면(샘플이 몇 개 없는 등) 추정도 약하다고 그대로 밝힌다 — 없는 근거를 지어내
+  단정하지 않는다(카파시 #1).
+- 프로파일이 얇으면(온보딩 초반, `lexicon`/`situational` 등이 비어있음) 리포트도 그만큼
+  얇다고 정직하게 밝히고, 더 채우면 풍성해진다고 안내한다 — 데이터에 없는 내용을 지어내지
+  않는다(카파시 #1). `isOnboard`가 아예 `false`면 다른 커맨드와 같은 방식으로 온보딩을
+  먼저 제안한다(§1).
+- 저장하지 않는 휘발성 출력이다(`analyze`/[16장 `explain`](#16-초안-근거-설명-explain)과 동일).
+
+## 19. 글쓰기 문체 온보딩 (writing_genre)
 
 수필/블로그/개발문서처럼 **답장이 아니라 혼자 완결된 글을 쓰는** 상황을 위한 문체
 프로파일이다. [6장 register](#6-채널격식별-레지스터-register)와 달리 "누구에게"가 아니라
 "무슨 장르로"가 축이라 별도 dimension으로 분리돼 있다.
 
-- **트리거**: `onboard writing [장르]`, 또는 [20장 `write`](#20-글쓰기-초안-write)가 호출됐는데
+- **트리거**: `onboard writing [장르]`, 또는 [21장 `write`](#21-글쓰기-초안-write)가 호출됐는데
   해당 장르 child가 없을 때 차단하지 않고 유도한다(§1과 동일한 게이트 패턴). 장르를 한 번에
   다 할 필요는 없다.
 - **완료 여부**: 별도 플래그 없이 `echo_dimension_child_get({parent_key:'writing_genre',
@@ -255,7 +281,7 @@ text, origin:'onboarding'})` 재사용 → ③ `child_schema`의 여섯 필드(`
 비워둬도 됨) → ④ `echo_dimension_child_put({parent_key:'writing_genre', child_key:'<장르>',
 echo_data:{...}})`로 저장 → ⑤ 다른 장르는 반복, 끝나면 `echo_export_md` 갱신 제안.
 
-## 19. Editorial 레퍼런스 (editorial)
+## 20. Editorial 레퍼런스 (editorial)
 
 `writing_genre`(§18)가 **사용자 본인** 문체라면, `editorial`은 **타인/외부** 문체를 참고용으로
 저장하는 레퍼런스 라이브러리다("이 칼럼니스트처럼 써줘").
@@ -269,15 +295,15 @@ echo_data:{...}})`로 저장 → ⑤ 다른 장르는 반복, 끝나면 `echo_ex
   발췌 원문을 오래 보관하려면 `echo_sample_add({channel:'etc', situation:'editorial:<이름>', ...})`로 별도 저장(§18과 동일 재사용 패턴).
 - `editorial list/get/del <이름>` — `echo_dimension_child_list/get/del({parent_key:'editorial', ...})`.
 
-## 20. 글쓰기 초안 (write)
+## 21. 글쓰기 초안 (write)
 
-`write <주제> [장르] [editorial:<이름>]` — [18장](#18-글쓰기-문체-온보딩-writing_genre)으로
+`write <주제> [장르] [editorial:<이름>]` — [19장](#19-글쓰기-문체-온보딩-writing_genre)으로
 학습한 문체로 독립된 글의 초안을 만든다. [13장 `say`](#13-의도--초안-say)와 비슷하게 의도/
 요점만 주면 되고, 상대 메시지를 전제하지 않는다.
 
 - 장르 미지정 시 확인하고, 미학습 장르는 차단하지 않고 §18 온보딩을 제안한다.
 - `echo_dimension_child_get({parent_key:'writing_genre', child_key:<장르>})`로 문체를 로드한다.
-- `editorial:<이름>`을 **명시했을 때만**([19장](#19-editorial-레퍼런스-editorial) 원칙) 함께
+- `editorial:<이름>`을 **명시했을 때만**([20장](#20-editorial-레퍼런스-editorial) 원칙) 함께
   참고하고, 참고했다는 사실을 초안에 투명하게 밝힌다.
 - `scope:'global'` 가드레일은 write에도 적용한다(channel/person scope는 해당 없음).
 - 개발문서처럼 길어질 장르는 본문 전에 목차/개요를 먼저 확인받는다.
@@ -285,7 +311,7 @@ echo_data:{...}})`로 저장 → ⑤ 다른 장르는 반복, 끝나면 `echo_ex
 - 발행된 최종본을 알려주면 [14장 feedback](#14-피드백-루프-feedback)과 같은 방식으로 그
   장르 child를 갱신할 수 있다(선택).
 
-## 21. [optional requirements]
+## 22. [optional requirements]
 
 - **ai-echo MCP** — 이 스킬 저장소 안의 `mcp-server/`(dJinn/SQLite 기반). 프로파일/호칭/
   샘플의 SoT 역할을 하는 선택적 요구사항이다 — 있으면 우선 사용하고, 없으면 아래 폴백을 따른다.
