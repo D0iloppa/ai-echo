@@ -38,6 +38,12 @@ description: >-
 - `mcp__ai-echo__*` (dJinn MCP)를 프로파일/호칭/샘플의 **SoT**로 쓴다. 사람이 읽는 스냅샷은
   `echo_export_md`로 뽑아 스킬 위치의 `PROFILE.md`로 미러한다(사람이 직접 열어볼 수 있게).
 - MCP가 없으면 절차를 막지 않되 [optional requirements](#19-optional-requirements)의 폴백을 따른다.
+- **온보딩 여부를 먼저 확인한다(isOnboard 게이트).** 어떤 커맨드든 진입 시 `echo_profile_get({owner})`로
+  프로파일을 확인한다. 프로파일이 없거나 `onboarded`가 `true`가 아니면(= `isOnboard=false`),
+  **진행을 막지 않고 온보딩을 유도한다** — "아직 말투 프로파일이 없어요. [3장 온보딩](#3-최초-온보딩-onboarding)을
+  먼저 하면 초안이 훨씬 당신 톤에 가까워집니다. 지금 할까요?"라고 제안한다. 사용자가 건너뛰길
+  원하면 프로파일 없이도 초안을 시도하되 품질 한계를 고지한다(카파시 #1 — 차단이 아니라 유도).
+  온보딩이 끝나면 `onboarded:true`로 전환되어(§3) 이후 진입에서는 이 유도가 뜨지 않는다.
 
 ## 2. 커맨드
 
@@ -92,9 +98,13 @@ description: >-
 4. 추출한 내용을 `echo_profile_put({owner, profile})`으로 저장한다. `profile`은 자유 형식
    JSON — 권장 키: `tone`(말투 특징), `register`(채널·격식별 톤 구조, [6장](#6-채널격식별-레지스터-register)
    참고), `situational`(상황별 반응 맵), `emoji`(자주 쓰는 이모지+빈도), `signoffs`(마무리
-   인사 패턴), `notes`(기타).
+   인사 패턴), `notes`(기타). **이때 `onboarded:true`와 `onboarded_at`(ISO 시각)을 함께 넣어
+   온보딩 완료를 표시한다** — 이 플래그가 §1의 isOnboard 게이트를 `true`로 전환한다.
 5. 온보딩이 끝나면 `echo_export_md({owner})`로 마크다운을 받아 스킬 위치의 `PROFILE.md`에
    Write 툴로 저장한다 — 사람이 언제든 열어볼 수 있는 스냅샷.
+
+> 온보딩은 **차단 게이트가 아니다.** `isOnboard=false`여도 사용자가 원하면 바로 다른 커맨드를
+> 쓸 수 있고, 스킬은 그때 온보딩을 한 번 권할 뿐이다(카파시 #1).
 
 ## 4. 프로파일링(정교화)
 
