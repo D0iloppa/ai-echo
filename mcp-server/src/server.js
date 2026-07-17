@@ -310,19 +310,6 @@ function createServer() {
       const childId = makeChildId(parent_key, child_key);
       const existing = djinn.get('echo_dimension_childs', childId);
 
-      if (existing) {
-        const snapKey = `${childId}@${existing.modified_at ?? now}`;
-        djinn.put(COLLECTION, `dim_snapshot|${snapKey}`, {
-          type: 'dim_snapshot',
-          key: snapKey,
-          parent_key,
-          child_key,
-          echo_data: existing.echo_data,
-          note: 'auto-snapshot on dimension_child_put',
-          created_at: now,
-        });
-      }
-
       djinn.put('echo_dimension_childs', childId, {
         parent_key,
         child_key,
@@ -342,23 +329,6 @@ function createServer() {
     async ({ parent_key, child_key }) => {
       djinn.del('echo_dimension_childs', makeChildId(parent_key, child_key));
       return json({ ok: true });
-    }
-  );
-
-  server.tool(
-    'echo_profile_history',
-    '프로파일 서브그래프 변경 이력(auto-snapshot)을 최신순으로 조회한다. parent_key/child_key로 좁혀서 조회할 수 있다. 드리프트 서사는 호출자(LLM)가 구성한다.',
-    {
-      parent_key: z.string().optional().describe('예: "register"'),
-      child_key: z.string().optional().describe('예: "kakao:친구"'),
-      limit: z.number().int().positive().optional().default(20),
-    },
-    async ({ parent_key, child_key, limit }) => {
-      const filter = { type: 'dim_snapshot' };
-      if (parent_key) filter.parent_key = parent_key;
-      if (child_key) filter.child_key = child_key;
-      const rows = djinn.find(COLLECTION, filter, { orderBy: 'created_at', orderDir: 'desc', limit });
-      return json(rows);
     }
   );
 
@@ -740,7 +710,6 @@ function createServer() {
       const sampleRows = djinn.find(COLLECTION, { owner, type: 'sample' });
       const templateRows = djinn.find(COLLECTION, { owner, type: 'template' });
       const guardrailRows = djinn.find(COLLECTION, { owner, type: 'guardrail' });
-      const snapshotRows = djinn.find(COLLECTION, { type: 'dim_snapshot' });
       const byChannel = {};
       for (const s of sampleRows) byChannel[s.channel] = (byChannel[s.channel] ?? 0) + 1;
       const completeness = profileCompleteness(profileDoc?.profile);
@@ -755,7 +724,6 @@ function createServer() {
         addressing_count: addressingRows.length,
         template_count: templateRows.length,
         guardrail_count: guardrailRows.length,
-        profile_snapshot_count: snapshotRows.length,
         top_emojis: topEmojis(profileDoc?.profile, 10),
       });
     }
@@ -763,7 +731,7 @@ function createServer() {
 
   server.tool(
     'echo_migrate_export',
-    '프로파일(루트+전체 dimension+전체 child, 전역 싱글턴이라 owner 무관)과 지정 owner의 addressing/sample/guardrail/template/dimension-변경이력을 다른 설치로 옮길 수 있는 이관용 JSON 번들로 덤프한다.',
+    '프로파일(루트+전체 dimension+전체 child, 전역 싱글턴이라 owner 무관)과 지정 owner의 addressing/sample/guardrail/template을 다른 설치로 옮길 수 있는 이관용 JSON 번들로 덤프한다.',
     {
       owner: z.string().optional().default('default'),
     },
@@ -771,7 +739,6 @@ function createServer() {
       const root = getProfileRoot();
       const dimensions = djinn.find('echo_dimension', {});
       const children = djinn.find('echo_dimension_childs', {});
-      const snapshotRows = djinn.find(COLLECTION, { type: 'dim_snapshot' });
       const rows = djinn.find(COLLECTION, { owner });
       const byType = (type) => rows.filter((r) => r.type === type);
       return json({
@@ -780,7 +747,6 @@ function createServer() {
         profile_root: root,
         dimensions,
         dimension_childs: children,
-        dimension_snapshots: snapshotRows,
         addressing: byType('addressing'),
         samples: byType('sample'),
         guardrails: byType('guardrail'),
@@ -803,7 +769,6 @@ function createServer() {
           profile_root: 0,
           dimensions: 0,
           dimension_childs: 0,
-          dimension_snapshots: 0,
           addressing: 0,
           samples: 0,
           guardrails: 0,
@@ -821,10 +786,6 @@ function createServer() {
         for (const row of bundle.dimension_childs ?? []) {
           djinn.put('echo_dimension_childs', makeChildId(row.parent_key, row.child_key), row);
           counts.dimension_childs += 1;
-        }
-        for (const row of bundle.dimension_snapshots ?? []) {
-          djinn.put(COLLECTION, `dim_snapshot|${row.key}`, row);
-          counts.dimension_snapshots += 1;
         }
         for (const row of bundle.addressing ?? []) {
           djinn.put(COLLECTION, makeId(owner, 'addressing', row.key), { ...row, owner });
@@ -847,12 +808,10 @@ function createServer() {
 
       if (mode === 'replace') {
         const existingOwnerRows = djinn.find(COLLECTION, { owner });
-        const existingSnapshots = djinn.find(COLLECTION, { type: 'dim_snapshot' });
         const existingDims = djinn.find('echo_dimension', {});
         const existingChildren = djinn.find('echo_dimension_childs', {});
         const result = djinn.transaction(() => {
           for (const row of existingOwnerRows) djinn.del(COLLECTION, row.id);
-          for (const row of existingSnapshots) djinn.del(COLLECTION, row.id);
           for (const row of existingDims) djinn.del('echo_dimension', row.id);
           for (const row of existingChildren) djinn.del('echo_dimension_childs', row.id);
           djinn.del('echo_profile', PROFILE_ID);
@@ -861,7 +820,7 @@ function createServer() {
         return json({
           ok: true,
           mode,
-          deleted: existingOwnerRows.length + existingSnapshots.length + existingDims.length + existingChildren.length + 1,
+          deleted: existingOwnerRows.length + existingDims.length + existingChildren.length + 1,
           imported: result,
         });
       }
