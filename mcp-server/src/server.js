@@ -3,7 +3,7 @@
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { z } = require('zod');
-const { djinn, makeId } = require('./db');
+const { djinn, makeId, PROFILE_ID, makeChildId } = require('./db');
 
 const COLLECTION = 'echo';
 
@@ -41,11 +41,61 @@ function topEmojis(profile, limit) {
     .map(([char, count]) => ({ char, count }));
 }
 
-function exportMarkdown(owner, profileDoc, addressingRows, sampleRows, guardrailRows, templateRows) {
+function getProfileRoot() {
+  return djinn.get('echo_profile', PROFILE_ID);
+}
+
+function ensureProfileRoot() {
+  let root = getProfileRoot();
+  if (!root) {
+    const now = new Date().toISOString();
+    root = {
+      schems: {},
+      isOnboard: false,
+      onboarded_at: null,
+      created_at: now,
+      modified_at: now,
+    };
+    djinn.put('echo_profile', PROFILE_ID, root);
+  }
+  return root;
+}
+
+// echo_dimension + echo_dimension_childs를 모아 예전 통짜 profile 객체와 동일한 모양으로
+// 재조립한다({profile, isOnboard, onboarded_at, created_at, modified_at}).
+// 축 없는(단일값) dimension은 child_key === echo_key 컨벤션이므로 그대로 값을 끌어올린다.
+// export/report/completeness처럼 "전체가 필요한" 소비자 전용 — draft/say 핫패스에서는 쓰지 않는다.
+function loadFullProfile() {
+  const root = getProfileRoot();
+  if (!root) return null;
+  const dims = djinn.find('echo_dimension', {});
+  const profile = {};
+  for (const dim of dims) {
+    const key = dim.echo_key;
+    const children = djinn.find('echo_dimension_childs', { parent_key: key });
+    if (children.length === 1 && children[0].child_key === key) {
+      profile[key] = children[0].echo_data;
+    } else {
+      const obj = {};
+      for (const c of children) obj[c.child_key] = c.echo_data;
+      profile[key] = obj;
+    }
+  }
+  return {
+    profile,
+    isOnboard: root.isOnboard,
+    onboarded_at: root.onboarded_at,
+    created_at: root.created_at,
+    modified_at: root.modified_at,
+  };
+}
+
+function exportMarkdown(profileDoc, addressingRows, sampleRows, guardrailRows, templateRows) {
   const lines = [];
-  lines.push(`# PROFILE (${owner})`);
+  lines.push('# PROFILE');
   lines.push('');
   if (profileDoc) {
+    lines.push(`- onboarded: ${profileDoc.isOnboard ? 'true' : 'false'}${profileDoc.onboarded_at ? ` (${profileDoc.onboarded_at})` : ''}`);
     lines.push(`- created_at: ${profileDoc.created_at}`);
     lines.push(`- modified_at: ${profileDoc.modified_at}`);
   } else {
@@ -137,65 +187,177 @@ function createServer() {
 
   server.tool(
     'echo_profile_get',
-    '소유자(owner)의 말투 프로파일 싱글턴을 조회한다. 없으면 null.',
-    {
-      owner: z.string().optional().default('default'),
-    },
-    async ({ owner }) => {
-      const doc = djinn.get(COLLECTION, makeId(owner, 'profile'));
-      return json(doc ?? null);
+    '루트 프로파일(싱글턴, owner 없음 — 이 스킬은 단일 사용자 전제)을 조회한다. schems(1차 노드 key→description 카탈로그), isOnboard, onboarded_at을 반환한다. 항상 가볍다. 특정 dimension의 구조가 필요하면 echo_dimension_get, 실제 내용이 필요하면 echo_dimension_child_get/echo_dimension_child_list를 쓴다.',
+    {},
+    async () => {
+      const root = getProfileRoot();
+      return json(root ?? { schems: null, isOnboard: false, onboarded_at: null });
     }
   );
 
   server.tool(
     'echo_profile_put',
-    '소유자의 말투 프로파일을 upsert 한다(merge-friendly). profile은 tone/register/situational/emoji/signoffs/notes 등 자유 형식 JSON.',
+    '루트 프로파일의 상태 필드(isOnboard, onboarded_at)를 갱신한다. schems는 여기서 직접 건드리지 않는다 — echo_dimension_put이 description을 넣을 때 자동으로 갱신되는 단일 출처다.',
     {
-      owner: z.string().optional().default('default'),
-      profile: z.record(z.any()).describe('말투/상황별 반응/이모지 등 자유 형식 프로파일 JSON'),
+      isOnboard: z.boolean().optional(),
+      onboarded_at: z.string().optional(),
     },
-    async ({ owner, profile }) => {
-      const id = makeId(owner, 'profile');
-      const existing = djinn.get(COLLECTION, id);
+    async ({ isOnboard, onboarded_at }) => {
+      const root = ensureProfileRoot();
       const now = new Date().toISOString();
       const doc = {
-        owner,
-        type: 'profile',
-        key: null,
-        profile,
-        created_at: existing?.created_at ?? now,
+        schems: root.schems ?? {},
+        isOnboard: isOnboard ?? root.isOnboard ?? false,
+        onboarded_at: onboarded_at ?? root.onboarded_at ?? null,
+        created_at: root.created_at ?? now,
         modified_at: now,
       };
+      djinn.put('echo_profile', PROFILE_ID, doc);
+      return json({ ok: true });
+    }
+  );
+
+  server.tool(
+    'echo_dimension_get',
+    '1차 노드(dimension) 하나를 조회한다. child_schema(그 밑 echo_data 필드:설명 명세, DDL 대용)를 반환한다.',
+    { echo_key: z.string() },
+    async ({ echo_key }) => {
+      const doc = djinn.get('echo_dimension', echo_key);
+      return json(doc ?? null);
+    }
+  );
+
+  server.tool(
+    'echo_dimension_put',
+    '1차 노드(dimension)를 upsert한다. description은 루트 schems 카탈로그에, child_schema는 이 dimension row에 저장된다 — 각각 유일한 출처라 서로 중복되지 않는다.',
+    {
+      echo_key: z.string().describe('예: "tone", "register", "situational", "writing_genre"'),
+      description: z.string().optional().describe('schems 카탈로그에 노출될 한줄 설명. 생략 시 기존 값 유지'),
+      child_schema: z
+        .record(z.any())
+        .optional()
+        .describe('이 dimension 밑 echo_data의 필드:설명 명세(key:description JSON). 생략 시 기존 값 유지'),
+    },
+    async ({ echo_key, description, child_schema }) => {
+      const now = new Date().toISOString();
+      const existingDim = djinn.get('echo_dimension', echo_key);
+      djinn.put('echo_dimension', echo_key, {
+        echo_key,
+        child_schema: child_schema ?? existingDim?.child_schema ?? {},
+        created_at: existingDim?.created_at ?? now,
+        modified_at: now,
+      });
+
+      const root = ensureProfileRoot();
+      const schems = { ...(root.schems ?? {}) };
+      schems[echo_key] = description ?? schems[echo_key] ?? echo_key;
+      djinn.put('echo_profile', PROFILE_ID, {
+        schems,
+        isOnboard: root.isOnboard ?? false,
+        onboarded_at: root.onboarded_at ?? null,
+        created_at: root.created_at ?? now,
+        modified_at: now,
+      });
+
+      return json({ ok: true, echo_key });
+    }
+  );
+
+  server.tool(
+    'echo_dimension_child_get',
+    '서브그래프(dimension_childs)에서 특정 child 하나를 point-lookup한다.',
+    { parent_key: z.string(), child_key: z.string() },
+    async ({ parent_key, child_key }) => {
+      const doc = djinn.get('echo_dimension_childs', makeChildId(parent_key, child_key));
+      return json(doc ?? null);
+    }
+  );
+
+  server.tool(
+    'echo_dimension_child_list',
+    '특정 dimension 밑 child_key 목록을 가볍게 조회한다(echo_data 내용은 싣지 않음 — 뭐가 있는지만 확인할 때).',
+    { parent_key: z.string() },
+    async ({ parent_key }) => {
+      const rows = djinn.find(
+        'echo_dimension_childs',
+        { parent_key },
+        { orderBy: 'child_key', orderDir: 'asc' }
+      );
+      return json(rows.map((r) => ({ child_key: r.child_key, created_at: r.created_at, modified_at: r.modified_at })));
+    }
+  );
+
+  server.tool(
+    'echo_dimension_child_put',
+    '서브그래프의 child 하나를 upsert한다(merge-friendly, 단일 child 단위). 축이 없는(단일값) dimension은 child_key를 parent_key(=echo_key)와 동일하게 쓰는 컨벤션을 따른다(예: parent_key:"tone", child_key:"tone"). 부모 dimension row가 없으면 자동 생성한다(description 없이 — 나중에 echo_dimension_put으로 채워도 된다).',
+    {
+      parent_key: z.string(),
+      child_key: z.string(),
+      echo_data: z.any().describe('실제 콘텐츠. 해당 dimension의 child_schema를 따른다'),
+    },
+    async ({ parent_key, child_key, echo_data }) => {
+      const now = new Date().toISOString();
+
+      if (!djinn.get('echo_dimension', parent_key)) {
+        djinn.put('echo_dimension', parent_key, {
+          echo_key: parent_key,
+          child_schema: {},
+          created_at: now,
+          modified_at: now,
+        });
+      }
+
+      const childId = makeChildId(parent_key, child_key);
+      const existing = djinn.get('echo_dimension_childs', childId);
+
       if (existing) {
-        const snapshotKey = existing.modified_at ?? now;
-        const snapshotId = makeId(owner, 'snapshot', snapshotKey);
-        djinn.put(COLLECTION, snapshotId, {
-          owner,
-          type: 'snapshot',
-          key: snapshotKey,
-          profile: existing.profile,
-          note: 'auto-snapshot on profile_put',
+        const snapKey = `${childId}@${existing.modified_at ?? now}`;
+        djinn.put(COLLECTION, `dim_snapshot|${snapKey}`, {
+          type: 'dim_snapshot',
+          key: snapKey,
+          parent_key,
+          child_key,
+          echo_data: existing.echo_data,
+          note: 'auto-snapshot on dimension_child_put',
           created_at: now,
         });
       }
-      djinn.put(COLLECTION, id, doc);
-      return json({ ok: true, id });
+
+      djinn.put('echo_dimension_childs', childId, {
+        parent_key,
+        child_key,
+        echo_data,
+        created_at: existing?.created_at ?? now,
+        modified_at: now,
+      });
+
+      return json({ ok: true, parent_key, child_key });
+    }
+  );
+
+  server.tool(
+    'echo_dimension_child_del',
+    '서브그래프의 child 하나를 삭제한다.',
+    { parent_key: z.string(), child_key: z.string() },
+    async ({ parent_key, child_key }) => {
+      djinn.del('echo_dimension_childs', makeChildId(parent_key, child_key));
+      return json({ ok: true });
     }
   );
 
   server.tool(
     'echo_profile_history',
-    '소유자의 프로파일 변경 이력(auto-snapshot) 목록을 최신순으로 조회한다. 드리프트 서사는 호출자(LLM)가 구성한다.',
+    '프로파일 서브그래프 변경 이력(auto-snapshot)을 최신순으로 조회한다. parent_key/child_key로 좁혀서 조회할 수 있다. 드리프트 서사는 호출자(LLM)가 구성한다.',
     {
-      owner: z.string().optional().default('default'),
+      parent_key: z.string().optional().describe('예: "register"'),
+      child_key: z.string().optional().describe('예: "kakao:친구"'),
       limit: z.number().int().positive().optional().default(20),
     },
-    async ({ owner, limit }) => {
-      const rows = djinn.find(
-        COLLECTION,
-        { owner, type: 'snapshot' },
-        { orderBy: 'created_at', orderDir: 'desc', limit }
-      );
+    async ({ parent_key, child_key, limit }) => {
+      const filter = { type: 'dim_snapshot' };
+      if (parent_key) filter.parent_key = parent_key;
+      if (child_key) filter.child_key = child_key;
+      const rows = djinn.find(COLLECTION, filter, { orderBy: 'created_at', orderDir: 'desc', limit });
       return json(rows);
     }
   );
@@ -528,23 +690,23 @@ function createServer() {
 
   server.tool(
     'echo_owner_list',
-    '컬렉션에 존재하는 모든 owner 값을 중복 제거해 조회한다(페르소나/프로필 전환용).',
+    '컬렉션에 존재하는 모든 owner 값을 중복 제거해 조회한다(addressing/sample/guardrail/template의 persona 전환용 — 프로파일 자체는 owner가 없는 전역 싱글턴이라 여기 포함되지 않는다).',
     {},
     async () => {
       const rows = djinn.find(COLLECTION, {});
-      const owners = [...new Set(rows.map((r) => r.owner))];
+      const owners = [...new Set(rows.map((r) => r.owner).filter((o) => o != null))];
       return json({ owners });
     }
   );
 
   server.tool(
     'echo_export_md',
-    '프로파일+전역호칭+샘플 요약을 PROFILE.md 형식 마크다운 문자열로 합성해 반환한다(파일 저장은 호출자가 Write 툴로 수행).',
+    '프로파일(루트+dimension+child 전체)과 지정 owner의 전역호칭/샘플 요약을 PROFILE.md 형식 마크다운 문자열로 합성해 반환한다(파일 저장은 호출자가 Write 툴로 수행).',
     {
       owner: z.string().optional().default('default'),
     },
     async ({ owner }) => {
-      const profileDoc = djinn.get(COLLECTION, makeId(owner, 'profile'));
+      const profileDoc = loadFullProfile();
       const addressingRows = djinn.find(
         COLLECTION,
         { owner, type: 'addressing' },
@@ -561,14 +723,7 @@ function createServer() {
         { owner, type: 'template' },
         { orderBy: 'situation', orderDir: 'asc' }
       );
-      const markdown = exportMarkdown(
-        owner,
-        profileDoc,
-        addressingRows,
-        sampleRows,
-        guardrailRows,
-        templateRows
-      );
+      const markdown = exportMarkdown(profileDoc, addressingRows, sampleRows, guardrailRows, templateRows);
       return { content: [{ type: 'text', text: markdown }] };
     }
   );
@@ -580,18 +735,19 @@ function createServer() {
       owner: z.string().optional().default('default'),
     },
     async ({ owner }) => {
-      const profileDoc = djinn.get(COLLECTION, makeId(owner, 'profile'));
+      const profileDoc = loadFullProfile();
       const addressingRows = djinn.find(COLLECTION, { owner, type: 'addressing' });
       const sampleRows = djinn.find(COLLECTION, { owner, type: 'sample' });
       const templateRows = djinn.find(COLLECTION, { owner, type: 'template' });
       const guardrailRows = djinn.find(COLLECTION, { owner, type: 'guardrail' });
-      const snapshotRows = djinn.find(COLLECTION, { owner, type: 'snapshot' });
+      const snapshotRows = djinn.find(COLLECTION, { type: 'dim_snapshot' });
       const byChannel = {};
       for (const s of sampleRows) byChannel[s.channel] = (byChannel[s.channel] ?? 0) + 1;
       const completeness = profileCompleteness(profileDoc?.profile);
       return json({
         owner,
         has_profile: !!profileDoc,
+        is_onboard: profileDoc?.isOnboard ?? false,
         profile_fields_present: completeness.present,
         profile_fields_missing: completeness.missing,
         sample_count_total: sampleRows.length,
@@ -607,31 +763,35 @@ function createServer() {
 
   server.tool(
     'echo_migrate_export',
-    '소유자의 전체 row(profile/addressing/sample/guardrail/template/snapshot 등 전 타입)를 다른 설치로 옮길 수 있는 이관용 JSON 번들로 덤프한다.',
+    '프로파일(루트+전체 dimension+전체 child, 전역 싱글턴이라 owner 무관)과 지정 owner의 addressing/sample/guardrail/template/dimension-변경이력을 다른 설치로 옮길 수 있는 이관용 JSON 번들로 덤프한다.',
     {
       owner: z.string().optional().default('default'),
     },
     async ({ owner }) => {
-      // type을 나열하지 않고 owner 전체 row를 한 번에 조회한 뒤 타입별로 묶는다(신규 타입 추가 시 자동 포함).
+      const root = getProfileRoot();
+      const dimensions = djinn.find('echo_dimension', {});
+      const children = djinn.find('echo_dimension_childs', {});
+      const snapshotRows = djinn.find(COLLECTION, { type: 'dim_snapshot' });
       const rows = djinn.find(COLLECTION, { owner });
-      const profileDoc = rows.find((r) => r.type === 'profile') ?? null;
       const byType = (type) => rows.filter((r) => r.type === type);
       return json({
         owner,
         exported_at: new Date().toISOString(),
-        profile: profileDoc,
+        profile_root: root,
+        dimensions,
+        dimension_childs: children,
+        dimension_snapshots: snapshotRows,
         addressing: byType('addressing'),
         samples: byType('sample'),
         guardrails: byType('guardrail'),
         templates: byType('template'),
-        snapshots: byType('snapshot'),
       });
     }
   );
 
   server.tool(
     'echo_migrate_import',
-    "echo_migrate_export가 만든 번들을 가져온다. mode='merge'(기본, upsert) 또는 'replace'(기존 owner 데이터를 트랜잭션으로 삭제 후 삽입).",
+    "echo_migrate_export가 만든 번들을 가져온다. mode='merge'(기본, upsert) 또는 'replace'(기존 데이터를 트랜잭션으로 삭제 후 삽입 — 프로파일은 전역이라 owner와 무관하게 전부 교체된다).",
     {
       owner: z.string().optional().default('default'),
       bundle: z.record(z.any()).describe('echo_migrate_export의 반환 JSON'),
@@ -640,17 +800,31 @@ function createServer() {
     async ({ owner, bundle, mode }) => {
       const doImport = () => {
         const counts = {
-          profiles: 0,
+          profile_root: 0,
+          dimensions: 0,
+          dimension_childs: 0,
+          dimension_snapshots: 0,
           addressing: 0,
           samples: 0,
           guardrails: 0,
           templates: 0,
-          snapshots: 0,
         };
 
-        if (bundle.profile) {
-          djinn.put(COLLECTION, makeId(owner, 'profile'), { ...bundle.profile, owner });
-          counts.profiles = 1;
+        if (bundle.profile_root) {
+          djinn.put('echo_profile', PROFILE_ID, bundle.profile_root);
+          counts.profile_root = 1;
+        }
+        for (const row of bundle.dimensions ?? []) {
+          djinn.put('echo_dimension', row.echo_key, row);
+          counts.dimensions += 1;
+        }
+        for (const row of bundle.dimension_childs ?? []) {
+          djinn.put('echo_dimension_childs', makeChildId(row.parent_key, row.child_key), row);
+          counts.dimension_childs += 1;
+        }
+        for (const row of bundle.dimension_snapshots ?? []) {
+          djinn.put(COLLECTION, `dim_snapshot|${row.key}`, row);
+          counts.dimension_snapshots += 1;
         }
         for (const row of bundle.addressing ?? []) {
           djinn.put(COLLECTION, makeId(owner, 'addressing', row.key), { ...row, owner });
@@ -668,21 +842,28 @@ function createServer() {
           djinn.put(COLLECTION, makeId(owner, 'template', row.key), { ...row, owner });
           counts.templates += 1;
         }
-        for (const row of bundle.snapshots ?? []) {
-          djinn.put(COLLECTION, makeId(owner, 'snapshot', row.key), { ...row, owner });
-          counts.snapshots += 1;
-        }
         return counts;
       };
 
       if (mode === 'replace') {
-        // 타입을 나열하지 않고 owner의 모든 row를 삭제한다(신규 타입도 자동 포함).
-        const existingRows = djinn.find(COLLECTION, { owner });
+        const existingOwnerRows = djinn.find(COLLECTION, { owner });
+        const existingSnapshots = djinn.find(COLLECTION, { type: 'dim_snapshot' });
+        const existingDims = djinn.find('echo_dimension', {});
+        const existingChildren = djinn.find('echo_dimension_childs', {});
         const result = djinn.transaction(() => {
-          for (const row of existingRows) djinn.del(COLLECTION, row.id);
+          for (const row of existingOwnerRows) djinn.del(COLLECTION, row.id);
+          for (const row of existingSnapshots) djinn.del(COLLECTION, row.id);
+          for (const row of existingDims) djinn.del('echo_dimension', row.id);
+          for (const row of existingChildren) djinn.del('echo_dimension_childs', row.id);
+          djinn.del('echo_profile', PROFILE_ID);
           return doImport();
         });
-        return json({ ok: true, mode, deleted: existingRows.length, imported: result });
+        return json({
+          ok: true,
+          mode,
+          deleted: existingOwnerRows.length + existingSnapshots.length + existingDims.length + existingChildren.length + 1,
+          imported: result,
+        });
       }
 
       const result = doImport();
@@ -700,4 +881,4 @@ async function serve() {
   return server;
 }
 
-module.exports = { createServer, serve };
+module.exports = { createServer, serve, loadFullProfile, exportMarkdown };

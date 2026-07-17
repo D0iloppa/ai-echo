@@ -3,3 +3,7 @@
 mcp-server/node_modules/
 mcp-server/data/*.db
 mcp-server/data/*.db-*
+mcp-server/data/backup/
+# 실제 개인 프로파일 스냅샷 — echo.db와 동일한 개인정보를 담고 있어 공유하지 않는다.
+# 기본 골격(스키마+dimension 껍데기)은 mcp-server/init/init.sql로 별도 관리한다.
+PROFILE.md

@@ -7,6 +7,9 @@
   "bin": {
     "ai-echo-mcp": "src/index.js"
   },
+  "scripts": {
+    "init": "node scripts/init-db.js"
+  },
   "dependencies": {
     "@d0iloppa/djinn": "git+https://github.com/D0iloppa/dJinn.git#3eacee5b03bc041e09f777aac6d581ebd97f63a8",
     "@modelcontextprotocol/sdk": "^1.29.0",

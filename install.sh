@@ -17,6 +17,16 @@ link_into() {  # $1 = config dir
   echo "linked: $dest/$NAME -> $SKILL_DIR"
 }
 
+setup_mcp_server() {
+  local mcp_dir="$SKILL_DIR/mcp-server"
+  [ -d "$mcp_dir" ] || return 0
+  echo "setting up mcp-server..."
+  (cd "$mcp_dir" && npm install --silent)
+  # init/init.sql은 CREATE ... IF NOT EXISTS / INSERT OR IGNORE라 이미 데이터가 있는
+  # data/echo.db에 다시 실행해도 기존 개인 데이터를 건드리지 않는다(멱등).
+  (cd "$mcp_dir" && node scripts/init-db.js)
+}
+
 if [ "${1:-}" = "--all-profiles" ]; then
   found=0
   for cfg in "$HOME"/.claude "$HOME"/.claude-*; do
@@ -31,3 +41,5 @@ else
   link_into "$CONFIG_DIR"
   echo "done. config dir: $CONFIG_DIR"
 fi
+
+setup_mcp_server
