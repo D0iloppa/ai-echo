@@ -37,7 +37,7 @@ description: >-
   이모지 남용, 상투적 마무리 등)로 흘러가지 않도록 프로파일에 근거해 교정한다.
 - `mcp__ai-echo__*` (dJinn MCP)를 프로파일/호칭/샘플의 **SoT**로 쓴다. 사람이 읽는 스냅샷은
   `echo_export_md`로 뽑아 스킬 위치의 `PROFILE.md`로 미러한다(사람이 직접 열어볼 수 있게).
-- MCP가 없으면 절차를 막지 않되 [optional requirements](#19-optional-requirements)의 폴백을 따른다.
+- MCP가 없으면 절차를 막지 않되 [optional requirements](#21-optional-requirements)의 폴백을 따른다.
 - **프로파일은 owner가 없는 전역 싱글턴이다.** 이 스킬은 "한 사람의 말투를 배우는 도구"라는
   전제(echo=메아리, 반사체는 하나)라 프로파일에 페르소나 개념을 두지 않는다. 업무/사적처럼
   상황에 따라 톤이 달라지는 건 [6장 register](#6-채널격식별-레지스터-register) 축으로
@@ -69,6 +69,12 @@ description: >-
 - **`say <의도/요점> [짧게|정중 장문|불릿|캐주얼]`** — 상대 메시지 없이 "이런 말을 하고
   싶다"는 의도/요점만 주면 프로파일 기반 초안을 렌더링한다. → [13장](#13-의도--초안-say)
 - **`onboard`** — 최초 온보딩을 실행한다. → [3장](#3-최초-온보딩-onboarding)
+- **`onboard writing [장르]`** — 대화체와 별개로, 수필/블로그/개발문서 등 **글쓰기 문체**를
+  온보딩한다(`writing_genre` dimension). 장르를 생략하면 어떤 장르부터 할지 먼저 확인한다.
+  → [19장](#19-글쓰기-문체-온보딩-writing_genre)
+- **`editorial [add|list|get|del] <레퍼런스명>`** — 글쓰기 시 참고할 타인/외부 문체 레퍼런스를
+  등록·조회·삭제한다(`editorial` dimension). 사용자 본인 문체(`writing_genre`)와 달리 명시적
+  호출 시에만 쓰이는 선택적 참고 자료다. → [20장](#20-editorial-레퍼런스-editorial)
 - **`profile`** — 현재 프로파일을 조회/정교화하고 인물별 전역 호칭을 관리한다.
   → [4장](#4-프로파일링정교화), [5장](#5-전역-호칭-vs-휘발성-호칭)
 - **`persona [<owner>]`** — 사용 가능한 페르소나(owner) 목록을 보거나 기본 owner를
@@ -123,13 +129,14 @@ description: >-
    | `notes` | 샘플 출처 및 프로파일 메타 노트 | 없음(`notes`) |
    | `register` | 채널·상대별 톤 레지스터 | `<채널:상대>` (예: `kakao:친구`) — [6장](#6-채널격식별-레지스터-register) |
    | `situational` | 상황별 정형 반응 패턴 | 상황명 (예: `지시 수용`, `거절/보류`) |
-   | `writing_genre` | 글쓰기 문체 — 장르별(수필/블로그/개발문서 등) 톤·구조 | 장르명 (예: `블로그`) |
+   | `writing_genre` | 글쓰기 문체 — 장르별(수필/블로그/개발문서 등) 톤·구조(사용자 본인) | 장르명 (예: `블로그`) — [19장](#19-글쓰기-문체-온보딩-writing_genre) |
+   | `editorial` | 글쓰기 시 참고할 타인/외부 문체 레퍼런스(명시적 호출 시에만 사용) | 레퍼런스명 — [20장](#20-editorial-레퍼런스-editorial) |
 
-   `writing_genre`는 dimension 껍데기(`child_schema`: voice/structure/rhythm/rhetorical_devices/
-   vocabulary/opening_closing)만 등록돼 있고 아직 child가 없다 — 실제 글(수필/블로그/개발문서
-   등)을 몇 편 받아 별도 온보딩 인터뷰를 해야 장르별 child가 채워진다. 이 dimension이 비어있는
-   동안 `write` 계열 커맨드가 호출되면 "아직 글쓰기 문체를 학습하지 않았다"고 안내하고 온보딩을
-   유도한다(§1 isOnboard 게이트와 같은 원칙 — 차단이 아니라 유도).
+   `writing_genre`/`editorial`은 dimension 껍데기(`child_schema`)만 등록돼 있고 아직 child가
+   없다 — 각각 [19장](#19-글쓰기-문체-온보딩-writing_genre)/[20장](#20-editorial-레퍼런스-editorial)의
+   절차로 채운다. `writing_genre`가 비어있는 동안 `write` 계열 커맨드가 호출되면 "아직 글쓰기
+   문체를 학습하지 않았다"고 안내하고 온보딩을 유도한다(§1 isOnboard 게이트와 같은 원칙 —
+   차단이 아니라 유도).
 
    **이때 `echo_profile_put({isOnboard:true, onboarded_at:<ISO 시각>})`도 호출해 온보딩
    완료를 표시한다** — 이 플래그가 §1의 isOnboard 게이트를 `true`로 전환한다.
@@ -351,7 +358,92 @@ description: >-
   `mode:'replace'`(기존 데이터 삭제 후 교체, 프로파일도 포함) — replace는 파괴적이므로 사용자
   확인 후에만 사용한다.
 
-## 19. [optional requirements]
+## 19. 글쓰기 문체 온보딩 (writing_genre)
+
+수필/블로그/개발문서처럼 **상대에게 답장하는 게 아니라 혼자 완결된 글을 쓰는** 상황을 위한
+문체 프로파일이다. [6장 register](#6-채널격식별-레지스터-register)와 달리 "누구에게 말하는가"가
+아니라 "무슨 장르로 쓰는가"가 축이라 별도 dimension(`writing_genre`)으로 분리돼 있다.
+`echo_dimension`에 이미 껍데기(`child_schema`: `voice`/`structure`/`rhythm`/
+`rhetorical_devices`/`vocabulary`/`opening_closing`)만 등록돼 있고 장르별 child는 비어
+있다 — 이 장은 그 child를 채우는 온보딩 절차다.
+
+- **트리거**: `onboard writing [장르]` 커맨드, 또는 향후 `write` 계열 커맨드가 호출됐는데
+  해당 장르의 child가 없을 때 자연스럽게 유도한다("아직 <장르> 문체를 학습 안 했어요.
+  지금 몇 편만 보여주시면 바로 배울 수 있어요. 할까요?") — §1 isOnboard 게이트와 같은
+  원칙으로 **차단하지 않고 유도**한다(카파시 #1). 장르가 여러 개 필요해도 한 번에 다 할
+  필요는 없다 — 사용자가 원하는 장르부터 하나씩 진행한다.
+- **완료 여부 판단에 별도 플래그가 없다** — `isOnboard`(§1)는 대화체 프로파일 전용이다.
+  특정 장르가 학습됐는지는 `echo_dimension_child_get({parent_key:'writing_genre',
+  child_key:'<장르>'})`가 `null`이 아닌지로 판단한다. 전체 장르 목록은
+  `echo_dimension_child_list({parent_key:'writing_genre'})`로 가볍게 확인한다.
+
+**절차**:
+
+1. **장르 확정** — 어떤 장르(수필/블로그/개발문서/기타)를 학습할지 확인한다. 사용자가
+   지정하지 않았으면 먼저 묻는다(카파시 #1). 기존 목록에 없는 장르면 새로 추가해도 된다 —
+   `child_key`는 자유 문자열이다(스키마 변경 불필요).
+2. **실제 글 샘플 요청** — 그 장르로 실제로 쓴 글을 1~3편 요청한다("최근에 쓰신 <장르> 글
+   1~3편만 붙여넣어 주세요"). 카카오톡 대화와 달리 한 편이 길 수 있으니 전체를 다 받아도
+   된다. [15장 ingest](#15-벌크-인제스트-ingest)처럼 파일 단위로 받을 수도 있다.
+   - 저장은 기존 `echo_sample_add`를 재사용한다 — 새 샘플 타입을 만들지 않는다(카파시 #2):
+     `echo_sample_add({channel:'etc', situation:'writing:<장르>', text:<원문>,
+     origin:'onboarding'})`. `situation`에 `writing:` 접두어를 붙여두면 나중에 채널별 샘플과
+     구분해서 필터링할 수 있다.
+3. **문체 특징 추출/인터뷰** — 받은 글(또는 사용자 설명)을 근거로 `writing_genre`
+   dimension의 `child_schema` 여섯 필드를 기준으로 인터뷰한다:
+   - `voice`(기본 어조/시점), `structure`(전개 패턴), `rhythm`(문장 길이·리듬),
+     `rhetorical_devices`(자주 쓰는 수사), `vocabulary`(어휘 선택 경향),
+     `opening_closing`(여닫는 방식). 샘플 글에서 직접 관찰되지 않는 필드는 짧게 물어봐도
+     되고, 근거가 약하면 비워둔 채로 저장해도 된다(억지로 채우지 않는다 — 카파시 #1).
+4. **저장** — `echo_dimension_child_put({parent_key:'writing_genre', child_key:'<장르>',
+   echo_data:{voice, structure, rhythm, rhetorical_devices, vocabulary, opening_closing}})`
+   로 장르 하나를 upsert한다. 이미 있는 장르를 다시 온보딩하면 병합 갱신되고 이전 값은
+   [16장 drift](#16-드리프트-리포트-drift)에 자동 스냅샷된다(child 단위 자동 이력 축적,
+   다른 코드 변경 불필요).
+5. **반복/완료** — 다른 장르도 학습하고 싶으면 1번부터 반복한다. 끝나면 자연스럽게
+   `echo_export_md`로 `PROFILE.md`를 갱신할지 물어본다([18장](#18-export--report--migration)와
+   동일한 패턴).
+
+> `write <주제> [장르]`처럼 이 문체를 실제로 사용해 글 초안을 뽑는 커맨드는 아직 별도로
+> 설계돼 있지 않다 — 이 장은 온보딩(데이터 채우기)까지만 다룬다.
+
+## 20. Editorial 레퍼런스 (editorial)
+
+`writing_genre`(§19)가 **사용자 본인의** 글쓰기 문체라면, `editorial`은 **타인/외부** 문체를
+참고용으로 저장해두는 레퍼런스 라이브러리다 — "이 칼럼니스트처럼 써줘", "이 블로그 톤을
+참고해서" 같은 경우를 위한 것이다. `echo_dimension`에 이미 껍데기(`child_schema`: `voice`/
+`structure`/`rhythm`/`rhetorical_devices`/`vocabulary`/`source`/`notes`)만 등록돼 있다.
+
+> **§1 원칙과의 관계**: 이 스킬의 기본값은 항상 사용자 본인의 말투를 재현하는 것이다(§1).
+> `editorial`의 레퍼런스는 **사용자가 명시적으로 호출했을 때만** 적용되는 선택적 스타일
+> 오버레이다 — `draft`/`say`/`write`가 기본적으로 참고하거나 자동으로 섞어 쓰지 않는다.
+> 또한 저작권·출처를 존중한다 — 원문을 그대로 베끼는 게 아니라 문체적 특징(어조/구조/리듬/
+> 수사)만 참고하는 용도이며, `source` 필드에 출처를 남겨 나중에 확인할 수 있게 한다.
+
+- **`editorial add <레퍼런스명>`** — 새 레퍼런스를 등록/갱신한다.
+  1. 참고하고 싶은 글의 발췌를 몇 문단 요청한다("어떤 글을 참고하고 싶으신가요? 몇 문단만
+     붙여넣어 주세요").
+  2. 출처를 확인한다(저자/매체/링크 등) — `source` 필드에 남긴다. 출처를 모르면 모른다고
+     저장해도 된다(카파시 #1, 억지로 채우지 않음).
+  3. `child_schema` 필드(`voice`/`structure`/`rhythm`/`rhetorical_devices`/`vocabulary`)
+     기준으로 특징을 추출한다.
+  4. `echo_dimension_child_put({parent_key:'editorial', child_key:'<레퍼런스명>',
+     echo_data:{voice, structure, rhythm, rhetorical_devices, vocabulary, source, notes}})`로
+     저장한다.
+  - 발췌 원문 자체를 오래 보관하고 싶으면 `echo_sample_add({channel:'etc',
+    situation:'editorial:<레퍼런스명>', text:<발췌>, origin:'manual'})`로 별도 저장할 수
+    있다(§19 writing_genre와 동일한 재사용 패턴 — 새 샘플 타입을 만들지 않는다, 카파시 #2).
+- **`editorial list`** — `echo_dimension_child_list({parent_key:'editorial'})`로 등록된
+  레퍼런스명 목록만 가볍게 조회한다.
+- **`editorial get <레퍼런스명>`** — `echo_dimension_child_get({parent_key:'editorial',
+  child_key:'<레퍼런스명>'})`로 상세 내용을 조회한다.
+- **`editorial del <레퍼런스명>`** — `echo_dimension_child_del({parent_key:'editorial',
+  child_key:'<레퍼런스명>'})`로 삭제한다.
+
+> `write <주제> [장르] [editorial:<레퍼런스명>]`처럼 이 레퍼런스를 실제로 글 생성에 섞어
+> 쓰는 커맨드는 아직 설계돼 있지 않다 — 이 장은 레퍼런스를 저장/관리하는 것까지만 다룬다.
+
+## 21. [optional requirements]
 
 - **ai-echo MCP** — 이 스킬 저장소 안의 `mcp-server/`(dJinn/SQLite 기반). 프로파일/호칭/
   샘플의 SoT 역할을 하는 선택적 요구사항이다 — 있으면 우선 사용하고, 없으면 아래 폴백을 따른다.

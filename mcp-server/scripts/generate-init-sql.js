@@ -76,6 +76,19 @@ const DIMENSIONS = [
       opening_closing: '글을 여닫는 방식(훅으로 시작, 요약으로 마무리 등)',
     },
   },
+  {
+    echo_key: 'editorial',
+    description: '글쓰기 시 참고할 타인/외부 문체 레퍼런스 라이브러리 (축: 레퍼런스명). writing_genre(사용자 본인 문체)와 달리 명시적으로 호출했을 때만 사용한다.',
+    child_schema: {
+      voice: '그 레퍼런스의 기본 어조/시점',
+      structure: '전개 패턴',
+      rhythm: '문장 길이·리듬',
+      rhetorical_devices: '자주 쓰는 수사',
+      vocabulary: '어휘 선택 경향',
+      source: '출처(저자/매체/링크 등 — 저작권 확인용)',
+      notes: '이 레퍼런스를 언제/어떤 목적으로 참고할지에 대한 메모',
+    },
+  },
 ];
 
 // id 컬럼용 — 있는 그대로의 문자열 리터럴(따옴표만 이스케이프).
