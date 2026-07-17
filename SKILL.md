@@ -37,7 +37,7 @@ description: >-
   이모지 남용, 상투적 마무리 등)로 흘러가지 않도록 프로파일에 근거해 교정한다.
 - `mcp__ai-echo__*` (dJinn MCP)를 프로파일/호칭/샘플의 **SoT**로 쓴다. 사람이 읽는 스냅샷은
   `echo_export_md`로 뽑아 스킬 위치의 `PROFILE.md`로 미러한다(사람이 직접 열어볼 수 있게).
-- MCP가 없으면 절차를 막지 않되 [optional requirements](#21-optional-requirements)의 폴백을 따른다.
+- MCP가 없으면 절차를 막지 않되 [optional requirements](#22-optional-requirements)의 폴백을 따른다.
 - **프로파일은 owner가 없는 전역 싱글턴이다.** 이 스킬은 "한 사람의 말투를 배우는 도구"라는
   전제(echo=메아리, 반사체는 하나)라 프로파일에 페르소나 개념을 두지 않는다. 업무/사적처럼
   상황에 따라 톤이 달라지는 건 [6장 register](#6-채널격식별-레지스터-register) 축으로
@@ -80,6 +80,9 @@ description: >-
 - **`editorial [add|list|get|del] <레퍼런스명>`** — 글쓰기 시 참고할 타인/외부 문체 레퍼런스를
   등록·조회·삭제한다(`editorial` dimension). 사용자 본인 문체(`writing_genre`)와 달리 명시적
   호출 시에만 쓰이는 선택적 참고 자료다. → [20장](#20-editorial-레퍼런스-editorial)
+- **`write <주제/요점> [장르] [editorial:<레퍼런스명>]`** — 답장이 아니라 독립된 글(수필/
+  블로그/개발문서 등)의 초안을 `writing_genre` 문체로 생성한다. `editorial:<레퍼런스명>`을
+  붙이면 그 레퍼런스도 명시적으로 참고한다. → [21장](#21-글쓰기-초안-write)
 - **`profile`** — 현재 프로파일을 조회/정교화하고 인물별 전역 호칭을 관리한다.
   → [4장](#4-프로파일링정교화), [5장](#5-전역-호칭-vs-휘발성-호칭)
 - **`persona [<owner>]`** — 사용 가능한 페르소나(owner) 목록을 보거나 기본 owner를
@@ -409,8 +412,8 @@ description: >-
    `echo_export_md`로 `PROFILE.md`를 갱신할지 물어본다([18장](#18-export--report--migration)와
    동일한 패턴).
 
-> `write <주제> [장르]`처럼 이 문체를 실제로 사용해 글 초안을 뽑는 커맨드는 아직 별도로
-> 설계돼 있지 않다 — 이 장은 온보딩(데이터 채우기)까지만 다룬다.
+> 이 문체를 실제로 사용해 글 초안을 뽑는 커맨드는 [21장 `write`](#21-글쓰기-초안-write)가
+> 담당한다 — 이 장은 온보딩(데이터 채우기)까지만 다룬다.
 
 ## 20. Editorial 레퍼런스 (editorial)
 
@@ -445,10 +448,44 @@ description: >-
 - **`editorial del <레퍼런스명>`** — `echo_dimension_child_del({parent_key:'editorial',
   child_key:'<레퍼런스명>'})`로 삭제한다.
 
-> `write <주제> [장르] [editorial:<레퍼런스명>]`처럼 이 레퍼런스를 실제로 글 생성에 섞어
-> 쓰는 커맨드는 아직 설계돼 있지 않다 — 이 장은 레퍼런스를 저장/관리하는 것까지만 다룬다.
+> 이 레퍼런스를 실제로 글 생성에 섞어 쓰는 커맨드는 [21장 `write`](#21-글쓰기-초안-write)가
+> 담당한다 — 이 장은 레퍼런스를 저장/관리하는 것까지만 다룬다.
 
-## 21. [optional requirements]
+## 21. 글쓰기 초안 (write)
+
+`write <주제/요점> [장르] [editorial:<레퍼런스명>]` — [19장](#19-글쓰기-문체-온보딩-writing_genre)
+으로 학습한 장르별 문체를 이용해, 답장이 아니라 독립된 글(수필/블로그/개발문서 등)의
+**초안**을 만든다. [13장 `say`](#13-의도--초안-say)와 비슷하게 "이런 내용을 쓰고 싶다"는
+요점만 주면 되고, 상대의 메시지를 전제하지 않는다.
+
+- **장르 확인** — `장르`를 지정하지 않았으면 먼저 확인한다(카파시 #1).
+  `echo_dimension_child_list({parent_key:'writing_genre'})`로 등록된 장르 목록을 참고해
+  후보를 제시해도 좋다.
+- **장르 미학습 시 유도** — 지정한 장르의 child가 없으면(`echo_dimension_child_get`이
+  `null`) 차단하지 않고 "아직 <장르> 문체를 학습 안 했어요. [19장](#19-글쓰기-문체-온보딩-writing_genre)
+  온보딩을 먼저 할까요, 아니면 일반적인 문체로 바로 써볼까요?"라고 제안한다(§1 isOnboard
+  게이트와 동일한 원칙 — 차단이 아니라 유도).
+- **문체 로드** — `echo_dimension_child_get({parent_key:'writing_genre', child_key:<장르>})`로
+  그 장르의 `voice`/`structure`/`rhythm`/`rhetorical_devices`/`vocabulary`/`opening_closing`을
+  불러와 초안에 반영한다.
+- **editorial 레퍼런스(선택)** — 사용자가 `editorial:<레퍼런스명>`을 명시했을 때만([20장](#20-editorial-레퍼런스-editorial)
+  원칙대로 자동 적용 금지) `echo_dimension_child_get({parent_key:'editorial',
+  child_key:<레퍼런스명>})`을 함께 불러와 참고한다. 원문을 베끼지 않고 어조/구조/리듬 등
+  문체적 특징만 참고하며, 초안 아래에 "이 초안은 <레퍼런스명> 문체를 일부 참고했습니다"라고
+  명시해 투명하게 알린다.
+- **가드레일 준수** — [8장](#8-스타일-가드레일-guardrail) 중 `scope:'global'`인 가드레일은
+  `write`에도 그대로 적용한다(`channel`/`person` scope는 대화 답장 전용이라 해당 없음).
+- **분량/구조 확인** — 글이 길어질 만한 장르(예: 개발문서)는 본문을 바로 쓰기 전에
+  목차/개요를 먼저 제시하고 확인받은 뒤 본문을 채운다(카파시 #1 — 큰 산출물을 만들기 전에
+  방향을 맞춘다). 짧은 장르(예: 블로그 단상)는 바로 초안을 써도 된다.
+- 초안 제시 후 [12장 `draft`](#12-답장-초안-생성-draft)와 동일하게 **"이대로 발행하지
+  마시고 검토 후 사용하세요"**를 매번 명시한다 — §1 원칙(AI가 대신 발행하지 않음)은
+  `write`에도 동일하게 적용된다.
+- 사용자가 실제로 다듬어 발행한 최종본을 알려주면, [14장 `feedback`](#14-피드백-루프-feedback)과
+  같은 방식으로 `echo_dimension_child_put`을 통해 그 장르 child를 갱신할 수 있다(선택,
+  강제하지 않음) — 실제 발행 결과가 온보딩 때 준 샘플보다 더 정확한 근거이기 때문이다.
+
+## 22. [optional requirements]
 
 - **ai-echo MCP** — 이 스킬 저장소 안의 `mcp-server/`(dJinn/SQLite 기반). 프로파일/호칭/
   샘플의 SoT 역할을 하는 선택적 요구사항이다 — 있으면 우선 사용하고, 없으면 아래 폴백을 따른다.
