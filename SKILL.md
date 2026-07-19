@@ -35,8 +35,9 @@ description: >-
   사용자의 최종 검토·수정·발송 없이는 아무것도 나가지 않는다는 전제를 매 응답에서 지킨다.
 - 초안은 사용자 **본인의 말투**를 재현하는 것이 목표다 — AI 특유의 문체(과도한 격식,
   이모지 남용, 상투적 마무리 등)로 흘러가지 않도록 프로파일에 근거해 교정한다.
-- `mcp__ai-echo__*` (dJinn MCP)를 프로파일/호칭/샘플의 **SoT**로 쓴다. 사람이 읽는 스냅샷은
-  `echo_export_md`로 뽑아 스킬 위치의 `PROFILE.md`로 미러한다(사람이 직접 열어볼 수 있게).
+- `mcp__ai-echo__*` (dJinn MCP)를 프로파일/호칭/샘플의 **SoT**로 쓴다. 사람이 읽는 스냅샷이
+  필요하면 사용자가 `export`를 호출했을 때만 `echo_export_md`로 뽑아 `PROFILE.md`에 저장한다
+  — 온보딩/학습 후 매번 미러하지 않는다(DB가 원본이므로 스냅샷은 on-demand).
 - MCP가 없으면 절차를 막지 않되 [optional requirements](#22-optional-requirements)의 폴백을 따른다.
 - **프로파일은 owner가 없는 전역 싱글턴이다.** 이 스킬은 "한 사람의 말투를 배우는 도구"라는
   전제(echo=메아리, 반사체는 하나)라 프로파일에 페르소나 개념을 두지 않는다. 업무/사적처럼
@@ -110,8 +111,7 @@ description: >-
 
    `writing_genre`/`editorial`/`lexicon`은 껍데기만 있고 child는 각 장의 절차(또는 4장의
    평소 정교화)로 채운다. 새 dimension이 필요하면 이 표의 패턴을 따라 추가한다(스키마 변경 불필요).
-5. `echo_profile_put({isOnboard:true, onboarded_at:<ISO 시각>})`으로 완료를 표시하고,
-   `echo_export_md({owner})`로 받은 마크다운을 `PROFILE.md`에 저장한다.
+5. `echo_profile_put({isOnboard:true, onboarded_at:<ISO 시각>})`으로 완료를 표시한다.
 
 > 온보딩은 차단 게이트가 아니다 — 사용자가 건너뛰면 그대로 진행한다.
 
@@ -279,7 +279,7 @@ description: >-
 text, origin:'onboarding'})` 재사용 → ③ `child_schema`의 여섯 필드(`voice`/`structure`/
 `rhythm`/`rhetorical_devices`/`vocabulary`/`opening_closing`) 기준으로 인터뷰(근거 약하면
 비워둬도 됨) → ④ `echo_dimension_child_put({parent_key:'writing_genre', child_key:'<장르>',
-echo_data:{...}})`로 저장 → ⑤ 다른 장르는 반복, 끝나면 `echo_export_md` 갱신 제안.
+echo_data:{...}})`로 저장 → ⑤ 다른 장르는 반복.
 
 ## 20. Editorial 레퍼런스 (editorial)
 
