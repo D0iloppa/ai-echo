@@ -100,6 +100,18 @@ const DIMENSIONS = [
       example: '실제 사용 예문',
     },
   },
+  {
+    echo_key: 'rhetoric',
+    description: '의도적으로 가끔 꺼내 쓰는 수사 장치 — 기본 톤이 아니라 상황에 선택 적용. draft가 자동 적용하지 않고 명시 호출 시에만 쓴다. (축: 장치명)',
+    child_schema: {
+      device: '장치의 정의 — 무엇을 하는 수사인가',
+      structure: '형태/공식 — 어떻게 구성되는가',
+      use_when: '발동 조건 — 언제 꺼내 쓰는가',
+      frequency: '사용 빈도 지침 (기본 톤 아님)',
+      caution: '역효과·금지 맥락 주의',
+      example: '예시 문장',
+    },
+  },
 ];
 
 // id 컬럼용 — 있는 그대로의 문자열 리터럴(따옴표만 이스케이프).
