@@ -673,6 +673,16 @@ function createServer() {
   );
 
   server.tool(
+    'echo_clear_cache',
+    'djinn LRU 쿼리 캐시를 전부 비운다. echo용 db를 다른 프로세스/커넥션이 직접 고쳤을 가능성이 있을 때 호출 — 안 비우면 이 프로세스가 낡은 값을 들고 있다가 이후 upsert 시 merge 베이스로 써서 외부 변경을 조용히 되돌릴 수 있다.',
+    {},
+    async () => {
+      djinn.clearCache();
+      return json(djinn.cacheStats());
+    }
+  );
+
+  server.tool(
     'echo_export_md',
     '프로파일(루트+dimension+child 전체)과 지정 owner의 전역호칭/샘플 요약을 PROFILE.md 형식 마크다운 문자열로 합성해 반환한다(파일 저장은 호출자가 Write 툴로 수행).',
     {
